@@ -1,0 +1,10 @@
+build/
+cmake-build-*/
+.cache/
+compile_commands.json
+*.o
+*.out
+# Anchored, so they do not also match include/logicdec/.
+/logicdec
+/logicdec_tests
+/hello_i2c
