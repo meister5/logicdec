@@ -4,14 +4,14 @@
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue)](CMakeLists.txt)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Header-only I2C, SPI and UART decoders for captured digital samples, plus the timing
+Header-only I2C, SPI and UART decoders I wrote for captured digital samples, plus the timing
 measurements underneath them: frequency, period, jitter and duty cycle. No dependencies,
 no allocation on the hot path, C++17.
 
 It runs on a desktop against a CSV from a USB analyzer, and on the microcontroller that took
 the capture. The second case shaped the design: an ESP32-S3 sampling four channels at 1 MS/s
-produces a megabyte a second, so samples are stored packed, one bit per channel, rather than
-one array per channel.
+produces a megabyte a second, so I store samples packed, one bit per channel, rather than one
+array per channel.
 
 ```cpp
 #include "logicdec/logicdec.hpp"
@@ -39,8 +39,8 @@ for (const I2cTransfer& transfer : decode_i2c(capture).transfers) {
 ## Failure cases
 
 A protocol decoder configured slightly wrong does not fail, it produces plausible bytes. Most
-of the design decisions here follow from that, so the ambiguous cases are represented
-explicitly instead of smoothed over.
+of my design decisions follow from that, so I represent the ambiguous cases explicitly instead
+of smoothing them over.
 
 **An unanswered address versus an empty write.** If nothing on the bus pulls SDA low, the
 transfer carries no data, which looks exactly like a successful write of zero bytes unless the
@@ -57,15 +57,15 @@ hides the one clue you had.
 
 **Short glitches are not treated as UART start bits.** A one-sample dip at 1 MS/s is 1/104th
 of a 9600-baud bit. Taking it as a start bit yields a byte of noise and desynchronises
-everything after it, so the start bit is confirmed at its centre before a frame is decoded.
-After a framing error the decoder resynchronises from the next edge rather than trusting the
-frame length it just failed to read.
+everything after it, so I confirm the start bit at its centre before decoding a frame. After a
+framing error I resynchronise from the next edge rather than trust the frame length I just
+failed to read.
 
 **Too few samples per bit is refused.** Below three samples per bit the bit
 centre cannot be placed. `decode_uart` throws rather than returning confident nonsense.
 
 **Timing that cannot be measured says so.** `TimingStats::measurable()` is false with fewer
-than two rising edges, instead of a plausible-looking 0 Hz. Period is measured rising-edge to
+than two rising edges, instead of a plausible-looking 0 Hz. I measure period rising-edge to
 rising-edge, which stays correct at a 10% duty cycle where half-period doubling would report
 twice the frequency.
 
@@ -75,7 +75,7 @@ The hard part of testing a protocol decoder is getting waveforms to test it with
 real traffic pins the tests to whatever the bus was doing that day, and producing a NACK, a
 mode mismatch or a corrupted stop bit on demand means deliberately breaking hardware.
 
-So the library ships waveform generators, and the tests round-trip through them:
+So I ship waveform generators, and my tests round-trip through them:
 
 ```cpp
 SampleStream stream = synth::I2c().write(0x3C, {0x00, 0xAE}).build();
