@@ -5,13 +5,13 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Header-only I2C, SPI and UART decoders for captured digital samples, plus the timing
-measurements — frequency, period, jitter, duty cycle — that sit under them. No dependencies,
+measurements underneath them: frequency, period, jitter and duty cycle. No dependencies,
 no allocation on the hot path, C++17.
 
-It runs on a desktop against a CSV from a USB analyzer, and it runs on the microcontroller
-that took the capture. That second case is what shaped the design: an ESP32-S3 sampling four
-channels at 1 MS/s produces a megabyte a second, so samples are stored packed — one bit per
-channel — rather than one array per channel.
+It runs on a desktop against a CSV from a USB analyzer, and on the microcontroller that took
+the capture. The second case shaped the design: an ESP32-S3 sampling four channels at 1 MS/s
+produces a megabyte a second, so samples are stored packed, one bit per channel, rather than
+one array per channel.
 
 ```cpp
 #include "logicdec/logicdec.hpp"
@@ -36,32 +36,32 @@ for (const I2cTransfer& transfer : decode_i2c(capture).transfers) {
 | **UART** | 5–9 data bits, even/odd/no parity, 1–2 stop bits, inverted lines, MSB-first, framing and parity errors, baud estimation |
 | **Timing** | Rising/falling counts, frequency, mean/min/max period, jitter, duty cycle, pulse widths |
 
-## Decode failures should look like failures
+## Failure cases
 
-Most of the design decisions here come from the same observation: a protocol decoder that is
-configured slightly wrong doesn't fail, it produces plausible bytes. So the awkward cases get
-represented rather than smoothed over.
+A protocol decoder configured slightly wrong does not fail, it produces plausible bytes. Most
+of the design decisions here follow from that, so the ambiguous cases are represented
+explicitly instead of smoothed over.
 
-**An unanswered address is not an empty write.** If nothing on the bus pulls SDA low, the
-transfer carries no data — which looks exactly like a successful write of zero bytes unless
-the acknowledge bit is tracked. `I2cTransfer::address_acked` is the difference between "no
+**An unanswered address versus an empty write.** If nothing on the bus pulls SDA low, the
+transfer carries no data, which looks exactly like a successful write of zero bytes unless the
+acknowledge bit is tracked. `I2cTransfer::address_acked` is the difference between "no
 device at 0x3C" and "wrote nothing".
 
-**A truncated capture is not a completed transfer.** `complete` is false when the samples ran
+**A truncated capture.** `complete` is false when the samples ran
 out mid-transfer, and an error annotation says so. A capture that ended early and a device
 that stopped clocking are indistinguishable in the bytes alone.
 
-**A partial SPI word is reported, not padded.** Leftover bits at the end of a chip-select
+**Partial SPI words are reported rather than padded.** Leftover bits at the end of a chip-select
 window almost always mean the mode or word size is wrong. Zero-padding them into a final byte
 hides the one clue you had.
 
-**A short glitch is not a UART start bit.** A one-sample dip at 1 MS/s is 1/104th of a
-9600-baud bit. Taking it as a start bit yields a byte of noise and desynchronises everything
-after it, so the start bit is confirmed at its centre before a frame is decoded — and after a
-framing error the decoder resynchronises from the next edge instead of trusting the frame
-length it just failed to read.
+**Short glitches are not treated as UART start bits.** A one-sample dip at 1 MS/s is 1/104th
+of a 9600-baud bit. Taking it as a start bit yields a byte of noise and desynchronises
+everything after it, so the start bit is confirmed at its centre before a frame is decoded.
+After a framing error the decoder resynchronises from the next edge rather than trusting the
+frame length it just failed to read.
 
-**Too few samples per bit is refused, not guessed.** Below three samples per bit the bit
+**Too few samples per bit is refused.** Below three samples per bit the bit
 centre cannot be placed. `decode_uart` throws rather than returning confident nonsense.
 
 **Timing that cannot be measured says so.** `TimingStats::measurable()` is false with fewer
@@ -69,9 +69,9 @@ than two rising edges, instead of a plausible-looking 0 Hz. Period is measured r
 rising-edge, which stays correct at a 10% duty cycle where half-period doubling would report
 twice the frequency.
 
-## Testing decoders without a bench
+## Testing decoders without a capture
 
-The awkward part of testing a protocol decoder is getting waveforms to test it with. Capturing
+The hard part of testing a protocol decoder is getting waveforms to test it with. Capturing
 real traffic pins the tests to whatever the bus was doing that day, and producing a NACK, a
 mode mismatch or a corrupted stop bit on demand means deliberately breaking hardware.
 
@@ -82,12 +82,12 @@ SampleStream stream = synth::I2c().write(0x3C, {0x00, 0xAE}).build();
 CHECK(decode_i2c(stream).transfers[0].data == std::vector<uint8_t>{0x00, 0xAE});
 ```
 
-That covers the parameter space rather than one capture — all 128 addresses, all 256 byte
+That covers the parameter space rather than one capture: all 128 addresses, all 256 byte
 values, all four SPI modes, five baud rates, both bit orders. It also makes the negative tests
 possible: `synth::UartDefect{.bad_stop = true}` produces a frame with a broken stop bit, and
 decoding a mode-0 SPI capture as mode 1 is asserted *not* to return the right bytes.
 
-The generators are useful outside the tests too — you can exercise a driver's parsing path
+The generators are useful outside the tests as well, for exercising a driver's parsing path
 with no device attached.
 
 ## Building
@@ -101,7 +101,7 @@ ctest --test-dir build --output-on-failure
 CI builds on GCC, Clang and MSVC across Linux, macOS and Windows, and runs the suite again
 under ASan and UBSan.
 
-To use it, add the include directory — that is the whole integration:
+To use it, add the include directory. That is the whole integration:
 
 ```cmake
 add_subdirectory(third_party/logicdec)
@@ -134,8 +134,8 @@ $ logicdec i2c examples/i2c_ssd1306.csv --quiet
   0x3C W 0x00 0xAF
 ```
 
-Without `--quiet` you get every annotation with its timestamp — START, address, each byte,
-each ACK — which is the transcript view a logic analyzer draws above the waveform.
+Without `--quiet` you get every annotation with its timestamp (START, address, each byte, each
+ACK), which is the transcript view a logic analyzer draws above the waveform.
 
 ## Layout
 
@@ -170,7 +170,7 @@ SampleStream stream = SampleStream::from_patterns({
 ## Scope
 
 Digital logic levels only. Analog capture, threshold detection and sample-rate conversion are
-somebody else's problem — feed this the ones and zeroes. Not implemented: I2C 10-bit
+out of scope; feed this the ones and zeroes. Not implemented: I2C 10-bit
 addressing (both bytes are reported, they are just not merged into one address), SMBus PEC,
 and I2S / CAN / 1-Wire.
 
